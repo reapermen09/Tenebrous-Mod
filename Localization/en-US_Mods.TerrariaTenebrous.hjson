@@ -1,0 +1,90 @@
+Items: {
+	VoidShard: {
+		DisplayName: Void Shard
+		Tooltip: ""
+	}
+
+	DarkshadeBlaster: {
+		DisplayName: Darkshade Blaster
+		Tooltip: ""
+	}
+
+	Starmerang: {
+		DisplayName: Starmerang
+		Tooltip: ""
+	}
+
+	NightskyString: {
+		DisplayName: Nightsky String
+		Tooltip: ""
+	}
+
+	StarSlasher: {
+		DisplayName: Star Slasher
+		Tooltip: ""
+	}
+
+	StaffOfStellarSpawn: {
+		DisplayName: Staff Of Stellar Spawn
+		Tooltip: Summons a small star to damage enemies near you.
+	}
+
+	StarlightTopHat: {
+		SetBonus: Increases amount of minions by 1. No mana cost on Starlight items.
+		DisplayName: Starlight Top Hat
+		Tooltip: Increases amount of minions by 1 and increases mana by 40.
+	}
+
+	StarlightPajamas: {
+		DisplayName: Starlight Pajamas
+		Tooltip: Increases amount of minions by 1.
+	}
+
+	StarlightSlides: {
+		DisplayName: Starlight Slides
+		Tooltip: Increases movement speed by 10%
+	}
+
+	StellarTelescope: {
+		DisplayName: Stellar Telescope
+		Tooltip: Summons a mysterious star...
+	}
+
+	StarlightBar: {
+		DisplayName: Starlight Bar
+		Tooltip: ""
+	}
+
+	StarlightOre: {
+		DisplayName: Starlight Ore
+		Tooltip: ""
+	}
+}
+
+Projectiles: {
+	VoidCrystal.DisplayName: Void Crystal
+	VoidShrapnel.DisplayName: Void Shrapnel
+	StarmerangProj.DisplayName: Starmerang
+	StarmerangStar.DisplayName: Starmerang Star
+	CosmicDust.DisplayName: Cosmic Dust
+	NightskyStar.DisplayName: Nightsky Star
+	StarSlasherProjectile.DisplayName: Star Slasher
+	UnistarProjectile.DisplayName: Unistar Star
+	LilStarProjectile.DisplayName: Lil' Star
+}
+
+NPCs: {
+	FrostDiggerBody.DisplayName: Frost Digger
+	FrostDiggerHead.DisplayName: Frost Digger
+	FrostDiggerTail.DisplayName: Frost Digger
+	Unistar.DisplayName: Unistar
+}
+
+Buffs: {
+	LilStarBuff: {
+		DisplayName: Lil' Star
+		Description: A small star is orbiting you, damaging enemies on contact.
+	}
+}
+
+Tiles.StarlightOreTile.MapEntry: Starlight Ore
