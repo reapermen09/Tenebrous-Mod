@@ -9,6 +9,14 @@ namespace TerrariaTenebrous.Content.Items.Consumables.BossSummons
 {
     class StellarTelescope : ModItem
     {
+        public override void SetStaticDefaults()
+        {
+            ItemID.Sets.SortingPriorityBossSpawns[Type] = 12;
+        }
+        public override void ModifyResearchSorting(ref ContentSamples.CreativeHelper.ItemGroup itemGroup)
+        {
+            itemGroup = ContentSamples.CreativeHelper.ItemGroup.BossSpawners;
+        }
         public override void SetDefaults()
         {
             Item.width = 32;
@@ -24,28 +32,30 @@ namespace TerrariaTenebrous.Content.Items.Consumables.BossSummons
 
         public override bool CanUseItem(Player player) 
         {
-            return !NPC.AnyNPCs(ModContent.NPCType<Unistar>()) && !Main.dayTime;
+            return !NPC.AnyNPCs(ModContent.NPCType<Unistar>()) && !Main.IsItDay();
         }
 
         public override bool? UseItem(Player player)
         {
-            int type = ModContent.NPCType<Unistar>();
+            if(player.whoAmI == Main.myPlayer)
+            {
+                SoundEngine.PlaySound(SoundID.Roar, player.position);
+                int type = ModContent.NPCType<Unistar>();
 
-            /*
-              should just come up from the sky,
-              i edited unistar to come down until it reachs
-              just above where the player spawned it
-            */
-            Vector2 spawn = player.Center + new Vector2(0, -1200);
-
-            NPC.SpawnBoss(
-                (int)spawn.X,
-                (int)spawn.Y,
-                type,
-                player.whoAmI
-            );
-
-            SoundEngine.PlaySound(SoundID.Roar);
+                if(Main.netMode != NetmodeID.MultiplayerClient)
+                {
+                    NPC.NewNPC(null, (int)player.position.X, (int)player.position.Y, type, Target:player.whoAmI);
+                }
+                else 
+                {
+                    ModPacket packet = ModContent.GetInstance<TerrariaTenebrous>().GetPacket();
+                    packet.Write((byte)TerrariaTenebrous.ModMessageType.SummonUnistar);
+                    packet.Write((int)player.position.X);
+                    packet.Write((int)player.position.Y);
+                    packet.Write(player.whoAmI);
+                    packet.Send();
+                }
+            }
 
             Main.NewText("A star begins to descend...", 150, 200, 255);
 

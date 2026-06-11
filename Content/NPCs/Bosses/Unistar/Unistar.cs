@@ -1,8 +1,10 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.IO;
 using Terraria;
 using Terraria.Audio;
+using Terraria.DataStructures;
 using Terraria.GameContent.Bestiary;
 using Terraria.GameContent.ItemDropRules;
 using Terraria.Graphics.CameraModifiers;
@@ -20,6 +22,8 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
         {
             NPCID.Sets.TrailingMode[Type] = 3;
             NPCID.Sets.TrailCacheLength[Type] = 30;
+            NPCID.Sets.MPAllowedEnemies[Type] = true;
+            NPCID.Sets.BossBestiaryPriority.Add(Type);
 
             base.SetStaticDefaults();
         }
@@ -35,11 +39,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
 
         public override void OnKill()
         {
-            if (Main.netMode != NetmodeID.MultiplayerClient)
-            {
-                var bossDowned = ModContent.GetInstance<BossDownedStates>();
-                bossDowned.isUnistarDefeated = true;
-            }
+            NPC.SetEventFlagCleared(ref ModContent.GetInstance<BossDownedStates>().isUnistarDefeated, -1);
         }
 
         public override void SetBestiary(BestiaryDatabase database, BestiaryEntry bestiaryEntry)
@@ -57,7 +57,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             NPC.height = 128;
             NPC.damage = 28;
             NPC.defense = 6;
-            NPC.lifeMax = 1000;
+            NPC.lifeMax = 1150;
             NPC.life = 1150;
             NPC.boss = true;
             NPC.value = 20000;
@@ -69,9 +69,13 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             Music = MusicLoader.GetMusicSlot(Mod, "Assets/Music/UnistarsTheme");
         }
 
-        public float speed = 9;
-        public float accelleration = 0.0025f;
-        public float preSlashDownTicker = 0;
+        public override void OnSpawn(IEntitySource source)
+        {
+            if(!NPC.HasValidTarget) NPC.TargetClosest();
+            if(!NPC.HasValidTarget) return;
+            NPC.position = new Vector2(NPC.position.X, Main.player[NPC.target].position.Y - 1200);
+            if (Main.netMode == NetmodeID.Server) NPC.netUpdate = true;
+        }
 
         public enum AttackState
         {
@@ -86,28 +90,45 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
         }
 
         public AttackState currentAttackState = AttackState.Intro;
-        public int side = 1;
+        public short side = 1;
+
+        public override void SendExtraAI(BinaryWriter writer)
+        {
+            writer.Write((int)currentAttackState);
+            writer.Write(side);
+        }
+        public override void ReceiveExtraAI(BinaryReader reader)
+        {
+            currentAttackState = (AttackState)reader.ReadInt32();
+            side = reader.ReadInt16();
+        }
 
         public override void AI()
         {
             if (Main.dayTime) currentAttackState = AttackState.PlayersDead;
 
             Lighting.AddLight(NPC.Center, Color.LightYellow.ToVector3());
-            bool allPlayersDead = true;
-            for (int i = 0; i < Main.maxPlayers; i++)
+
+            if(Main.netMode != NetmodeID.MultiplayerClient)
             {
-                if (Main.player[i].active && !Main.player[i].dead)
+                bool allPlayersDead = true;
+                for (int i = 0; i < Main.maxPlayers; i++)
                 {
-                    allPlayersDead = false;
+                    if (Main.player[i].active && !Main.player[i].dead)
+                    {
+                        allPlayersDead = false;
+                    }
                 }
+
+                if (allPlayersDead) currentAttackState = AttackState.PlayersDead;
+                NPC.netUpdate = true;
             }
 
-            if (allPlayersDead) currentAttackState = AttackState.PlayersDead;
-
-            if (NPC.frameCounter == 0)
+            if (NPC.frameCounter == 0 && Main.netMode != NetmodeID.MultiplayerClient)
             {
                 NPC.TargetClosest();
                 currentAttackState = AttackState.Intro;
+                NPC.netUpdate = true;
             }
 
             Player player = Main.player[NPC.target];
@@ -119,8 +140,12 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                 if (NPC.frameCounter > 244)
                 {
                     NPC.frameCounter = 0;
-                    currentAttackState = AttackState.Blast;
                     SoundEngine.PlaySound(SoundID.Pixie, NPC.Center);
+                    if(Main.netMode != NetmodeID.MultiplayerClient)
+                    {
+                        currentAttackState = AttackState.Blast;
+                        NPC.netUpdate = true;
+                    }
                 }
             }
             else if (currentAttackState == AttackState.PrepareDash)
@@ -151,7 +176,11 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     NPC.velocity = Vector2.Normalize(player.Center + player.velocity * 50 - NPC.Center) * 15;
 
                     NPC.frameCounter = 0;
-                    currentAttackState = AttackState.Dashing;
+                    if(Main.netMode != NetmodeID.MultiplayerClient)
+                    {
+                        currentAttackState = AttackState.Dashing;
+                        NPC.netUpdate = true;
+                    }
                 }
             }
             else if (currentAttackState == AttackState.Dashing)
@@ -161,8 +190,12 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                 {
                     NPC.frameCounter = 0;
                     NPC.knockBackResist = 1f;
-                    currentAttackState = AttackState.Chasing;
-                    side *= -1;
+                    if(Main.netMode != NetmodeID.MultiplayerClient)
+                    {
+                        currentAttackState = AttackState.Chasing;
+                        side *= -1;
+                        NPC.netUpdate = true;
+                    }
                 }
             }
             else if (currentAttackState == AttackState.Blast)
@@ -191,7 +224,11 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
 
                     NPC.frameCounter = 0;
-                    currentAttackState = AttackState.Chasing;
+                    if(Main.netMode != NetmodeID.MultiplayerClient)
+                    {
+                        currentAttackState = AttackState.Chasing;
+                        NPC.netUpdate = true;
+                    }
                 }
             }
             else if (currentAttackState == AttackState.Chasing)
@@ -202,19 +239,35 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     NPC.frameCounter = 0;
                     if (Main.rand.NextBool(5))
                     {
-                        currentAttackState = AttackState.Blast;
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            currentAttackState = AttackState.Blast;
+                            NPC.netUpdate = true;
+                        }
                     }
                     else if (Main.rand.NextBool(5))
                     {
-                        currentAttackState = AttackState.PrepareDash;
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            currentAttackState = AttackState.PrepareDash;
+                            NPC.netUpdate = true;
+                        }
                     }
                     else if (Main.rand.NextBool(2))
                     {
-                        currentAttackState = AttackState.Spin;
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            currentAttackState = AttackState.PrepareDash;
+                            NPC.netUpdate = true;
+                        }
                     }
                     else
                     {
-                        currentAttackState = AttackState.Spread;
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            currentAttackState = AttackState.Spread;
+                            NPC.netUpdate = true;
+                        }
                     }
                 }
             }
@@ -225,13 +278,22 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     if (NPC.frameCounter > 300)
                     {
                         NPC.frameCounter = 0;
-                        currentAttackState = AttackState.PrepareDash;
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            currentAttackState = AttackState.PrepareDash;
+                            NPC.netUpdate = true;
+                        }
                     }
 
                     if (NPC.frameCounter % 18 == 0)
                     {
                         SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
-                        Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, new Vector2(Main.rand.NextFloat(-0.5f, 0.5f), 8), ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, new Vector2(Main.rand.NextFloat(-0.5f, 0.5f), 8), ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                            Main.projectile[proj].netImportant = true;
+                            Main.projectile[proj].netUpdate = true;
+                        }
                     }
                 }
 
@@ -245,7 +307,11 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     if (NPC.frameCounter > 300)
                     {
                         NPC.frameCounter = 0;
-                        currentAttackState = AttackState.Blast;
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            currentAttackState = AttackState.Blast;
+                            NPC.netUpdate = true;
+                        }
                     }
 
                     NPC.rotation = (player.Center - NPC.Center).ToRotation() + (float)Math.Cos(NPC.frameCounter / 8) / 3;
@@ -253,7 +319,12 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     if (NPC.frameCounter % 18 == 0)
                     {
                         SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
-                        Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, NPC.rotation.ToRotationVector2() * Main.rand.Next(7, 12), ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                        if(Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, NPC.rotation.ToRotationVector2() * Main.rand.Next(7, 12), ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                            Main.projectile[proj].netImportant = true;
+                            Main.projectile[proj].netUpdate = true;
+                        }
                     }
                 }
 
