@@ -41,10 +41,12 @@ namespace TerrariaTenebrous.Content.Items.Consumables.BossSummons
             {
                 SoundEngine.PlaySound(SoundID.Roar, player.position);
                 int type = ModContent.NPCType<Unistar>();
+        
+                Vector2 spawn = player.Center + new Vector2(0, -1200);
 
                 if(Main.netMode != NetmodeID.MultiplayerClient)
                 {
-                    NPC.NewNPC(null, (int)player.position.X, (int)player.position.Y, type, Target:player.whoAmI);
+                    NPC.NewNPC(null, (int)spawn.X, (int)spawn.Y, type, Target:player.whoAmI);
                 }
                 else 
                 {
