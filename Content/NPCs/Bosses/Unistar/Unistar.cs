@@ -87,6 +87,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             Dashing,
             Spread,
             Spin,
+            FlyToPlayer,
             PlayersDead
         }
 
@@ -140,7 +141,8 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             if(rand == current ||
                 rand == AttackState.PrepareDash && current == AttackState.Dashing)
                     return ChooseRandomAttack(current);
-            return rand;
+            if(current == AttackState.FlyToPlayer || Vector2.Distance(NPC.Center, Main.player[NPC.target].Center) < 800) return rand;
+            return AttackState.FlyToPlayer;
         }
         public override void AI()
         {
@@ -185,6 +187,17 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                         currentAttackState = ChooseRandomAttack();
                         NPC.netUpdate = true;
                     }
+                }
+            }
+            else if (currentAttackState == AttackState.FlyToPlayer)
+            {
+                NPC.rotation += 1f;
+                NPC.velocity = Vector2.Lerp(NPC.velocity, NPC.Center.DirectionTo(Main.player[NPC.target].Center) * 14f, 0.03f);
+                if(Main.netMode != NetmodeID.MultiplayerClient &&
+                    Vector2.Distance(NPC.Center, Main.player[NPC.target].Center) < 700)
+                {
+                    currentAttackState = ChooseRandomAttack();
+                    NPC.netUpdate = true;
                 }
             }
             else if (currentAttackState == AttackState.PrepareDash)
