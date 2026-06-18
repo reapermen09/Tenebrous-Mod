@@ -17,9 +17,9 @@ namespace TerrariaTenebrous.Content.NPCs
         public override void ModifyNPCLoot(NPC npc, NPCLoot npcLoot)
         {
             if (npc.type == NPCID.Harpy)
-                npcLoot.Add(ItemDropRule.Common(ModContent.ItemType<StellarTelescope>(), 40, 1, 1));
+                npcLoot.Add(ItemDropRule.Common(ModContent.ItemType<StellarTelescope>(), 40));
             else if(!npc.boss && !bossDowned.isUnistarDefeated && npc.damage > 0 && npc.lifeMax >= 10)
-                npcLoot.Add(ItemDropRule.Common(ModContent.ItemType<StellarTelescope>(), 250, 1, 1));
+                npcLoot.Add(ItemDropRule.Common(ModContent.ItemType<StellarTelescope>(), 250));
         }
     }
 }

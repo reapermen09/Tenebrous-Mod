@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Terraria;
 using Terraria.Audio;
@@ -50,15 +51,14 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                 new FlavorTextBestiaryInfoElement("A star that descends upon the use of the Stellar Telescope."),
             });
         }
-
         public override void SetDefaults()
         {
             NPC.width = 128;
             NPC.height = 128;
-            NPC.damage = 28;
+            NPC.damage = 20;
             NPC.defense = 6;
-            NPC.lifeMax = 1150;
-            NPC.life = 1150;
+            NPC.lifeMax = 1850;
+            NPC.life = 1850;
             NPC.boss = true;
             NPC.value = 20000;
             NPC.noTileCollide = true;
@@ -68,7 +68,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             NPC.npcSlots = 10f;
             Music = MusicLoader.GetMusicSlot(Mod, "Assets/Music/UnistarsTheme");
         }
-
+        int projectileDmg = 10;
         public override void OnSpawn(IEntitySource source)
         {
             if(!NPC.HasValidTarget) NPC.TargetClosest();
@@ -82,6 +82,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             Intro,
             Chasing,
             Blast,
+            CircleStars,
             PrepareDash,
             Dashing,
             Spread,
@@ -91,18 +92,56 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
 
         public AttackState currentAttackState = AttackState.Intro;
         public short side = 1;
-
+        public Vector2 circleStarsCenter;
+        public float circleStarsAngle = 0f;
+        public int circleStarsShotCount = 0;
+        public bool circleStarsHasTeleported = false;
+        private const int CircleStarsTotal = 16;
+        private const float CircleStarsRadius = 550f;
         public override void SendExtraAI(BinaryWriter writer)
         {
             writer.Write((int)currentAttackState);
             writer.Write(side);
+            writer.Write(circleStarsAngle);
+            writer.Write(circleStarsShotCount);
+            writer.WriteVector2(circleStarsCenter);
+            writer.Write(circleStarsHasTeleported);
         }
+
         public override void ReceiveExtraAI(BinaryReader reader)
         {
             currentAttackState = (AttackState)reader.ReadInt32();
             side = reader.ReadInt16();
+            circleStarsAngle = reader.ReadSingle();
+            circleStarsShotCount = reader.ReadInt32();
+            circleStarsCenter = reader.ReadVector2();
+            circleStarsHasTeleported = reader.ReadBoolean();
         }
-
+        AttackState ChooseRandomAttack(AttackState current = default)
+        {
+            if(current == default) current = currentAttackState;
+            if(current == AttackState.PrepareDash) return AttackState.Dashing;
+            NPC.TargetClosest();
+            if(current != AttackState.Chasing && NPC.HasValidTarget)
+            {
+                if(Vector2.Distance(NPC.Center, Main.player[NPC.target].Center) > 1400)
+                    return AttackState.Chasing;
+            }
+            List<AttackState> states = new List<AttackState>()
+            {
+                AttackState.Blast,
+                AttackState.Chasing,
+                AttackState.PrepareDash,
+                AttackState.Spin,
+                AttackState.Spread,
+                AttackState.CircleStars
+            };
+            AttackState rand = states[Main.rand.Next(states.Count)];
+            if(rand == current ||
+                rand == AttackState.PrepareDash && current == AttackState.Dashing)
+                    return ChooseRandomAttack(current);
+            return rand;
+        }
         public override void AI()
         {
             if (Main.dayTime) currentAttackState = AttackState.PlayersDead;
@@ -143,7 +182,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     SoundEngine.PlaySound(SoundID.Pixie, NPC.Center);
                     if(Main.netMode != NetmodeID.MultiplayerClient)
                     {
-                        currentAttackState = AttackState.Blast;
+                        currentAttackState = ChooseRandomAttack();
                         NPC.netUpdate = true;
                     }
                 }
@@ -168,7 +207,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     for (int i = 0; i < 5; i++)
                     {
                         float rot = (float)i / 5 * (float)(Math.PI * 2);
-                        Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, rot.ToRotationVector2() * 15, ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                        Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, rot.ToRotationVector2() * 15, ModContent.ProjectileType<UnistarProjectile>(), projectileDmg, 1f);
                     }
 
                     SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
@@ -178,7 +217,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     NPC.frameCounter = 0;
                     if(Main.netMode != NetmodeID.MultiplayerClient)
                     {
-                        currentAttackState = AttackState.Dashing;
+                        currentAttackState = ChooseRandomAttack();
                         NPC.netUpdate = true;
                     }
                 }
@@ -192,7 +231,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     NPC.knockBackResist = 1f;
                     if(Main.netMode != NetmodeID.MultiplayerClient)
                     {
-                        currentAttackState = AttackState.Chasing;
+                        currentAttackState = ChooseRandomAttack();
                         side *= -1;
                         NPC.netUpdate = true;
                     }
@@ -218,7 +257,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     for (int i = 0; i < 16; i++)
                     {
                         float rot = (float)i / 16 * (float)(Math.PI * 2);
-                        Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, rot.ToRotationVector2() * 7, ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                        Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, rot.ToRotationVector2() * 7, ModContent.ProjectileType<UnistarProjectile>(), projectileDmg, 1f);
                     }
 
                     SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
@@ -226,7 +265,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                     NPC.frameCounter = 0;
                     if(Main.netMode != NetmodeID.MultiplayerClient)
                     {
-                        currentAttackState = AttackState.Chasing;
+                        currentAttackState = ChooseRandomAttack();
                         NPC.netUpdate = true;
                     }
                 }
@@ -237,37 +276,10 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                 if (NPC.frameCounter > 150)
                 {
                     NPC.frameCounter = 0;
-                    if (Main.rand.NextBool(5))
+                    if(Main.netMode != NetmodeID.MultiplayerClient)
                     {
-                        if(Main.netMode != NetmodeID.MultiplayerClient)
-                        {
-                            currentAttackState = AttackState.Blast;
-                            NPC.netUpdate = true;
-                        }
-                    }
-                    else if (Main.rand.NextBool(5))
-                    {
-                        if(Main.netMode != NetmodeID.MultiplayerClient)
-                        {
-                            currentAttackState = AttackState.PrepareDash;
-                            NPC.netUpdate = true;
-                        }
-                    }
-                    else if (Main.rand.NextBool(2))
-                    {
-                        if(Main.netMode != NetmodeID.MultiplayerClient)
-                        {
-                            currentAttackState = AttackState.PrepareDash;
-                            NPC.netUpdate = true;
-                        }
-                    }
-                    else
-                    {
-                        if(Main.netMode != NetmodeID.MultiplayerClient)
-                        {
-                            currentAttackState = AttackState.Spread;
-                            NPC.netUpdate = true;
-                        }
+                        currentAttackState = ChooseRandomAttack();
+                        NPC.netUpdate = true;
                     }
                 }
             }
@@ -280,7 +292,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                         NPC.frameCounter = 0;
                         if(Main.netMode != NetmodeID.MultiplayerClient)
                         {
-                            currentAttackState = AttackState.PrepareDash;
+                            currentAttackState = ChooseRandomAttack();
                             NPC.netUpdate = true;
                         }
                     }
@@ -290,7 +302,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                         SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
                         if(Main.netMode != NetmodeID.MultiplayerClient)
                         {
-                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, new Vector2(Main.rand.NextFloat(-0.5f, 0.5f), 8), ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, new Vector2(Main.rand.NextFloat(-0.5f, 0.5f), 8), ModContent.ProjectileType<UnistarProjectile>(), projectileDmg, 1f);
                             Main.projectile[proj].netImportant = true;
                             Main.projectile[proj].netUpdate = true;
                         }
@@ -309,7 +321,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                         NPC.frameCounter = 0;
                         if(Main.netMode != NetmodeID.MultiplayerClient)
                         {
-                            currentAttackState = AttackState.Blast;
+                            currentAttackState = ChooseRandomAttack();
                             NPC.netUpdate = true;
                         }
                     }
@@ -321,7 +333,7 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                         SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
                         if(Main.netMode != NetmodeID.MultiplayerClient)
                         {
-                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, NPC.rotation.ToRotationVector2() * Main.rand.Next(7, 12), ModContent.ProjectileType<UnistarProjectile>(), NPC.damage / 2, 1f);
+                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, NPC.rotation.ToRotationVector2() * Main.rand.Next(7, 12), ModContent.ProjectileType<UnistarProjectile>(), projectileDmg, 1f);
                             Main.projectile[proj].netImportant = true;
                             Main.projectile[proj].netUpdate = true;
                         }
@@ -329,6 +341,87 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
                 }
 
                 NPC.velocity *= 0.98f;
+            }
+            else if (currentAttackState == AttackState.CircleStars)
+            {
+                if (Main.netMode != NetmodeID.MultiplayerClient && NPC.frameCounter <= 1)
+                {
+                    if (!NPC.HasValidTarget) NPC.TargetClosest();
+                    circleStarsCenter = Main.player[NPC.target].Center + new Vector2(0, -200);
+                    circleStarsAngle = 0f;
+                    circleStarsShotCount = 0;
+                    circleStarsHasTeleported = false;
+                    NPC.netUpdate = true;
+                }
+
+                if (!circleStarsHasTeleported)
+                {
+                    PunchCameraModifier modifier = new PunchCameraModifier(NPC.Center, Vector2.One, 20f, 8f, 20, 600f, FullName);
+                    Main.instance.CameraModifiers.Add(modifier);
+                    SoundEngine.PlaySound(SoundID.Item14, NPC.Center);
+                    for (int i = 0; i < 30; i++)
+                    {
+                        Dust.NewDust(NPC.Center, 50, 50, DustID.GoldFlame, Main.rand.NextFloat(-8f, 8f), Main.rand.NextFloat(-8f, 8f));
+                    }
+                    circleStarsHasTeleported = true;
+                    if (Main.netMode != NetmodeID.MultiplayerClient) NPC.netUpdate = true;
+                }
+
+                float angularSpeed = 0.025f;
+                circleStarsAngle += angularSpeed;
+                NPC.Center = circleStarsCenter + circleStarsAngle.ToRotationVector2() * CircleStarsRadius;
+                NPC.velocity = Vector2.Zero;
+
+                Vector2 tangent = (-circleStarsAngle.ToRotationVector2()).RotatedBy(-MathHelper.PiOver2);
+                NPC.rotation = NPC.rotation.AngleLerp(tangent.ToRotation(), 0.15f);
+
+                float threshold = 0.08f;
+
+                for (int i = circleStarsShotCount; i < CircleStarsTotal; i++)
+                {
+                    float targetAngle = MathHelper.TwoPi * i / CircleStarsTotal;
+                    float diff = circleStarsAngle - targetAngle;
+
+                    diff = (diff + MathHelper.Pi) % MathHelper.TwoPi - MathHelper.Pi;
+
+                    if (diff > 0 && diff < threshold)
+                    {
+                        Vector2 direction = Vector2.Normalize(circleStarsCenter - NPC.Center);
+                        direction = direction.RotatedBy(Main.rand.NextFloat(-0.1f, 0.1f));
+
+                        if (Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, direction * 12f,
+                                ModContent.ProjectileType<UnistarProjectile>(), projectileDmg, 1f);
+                            Main.projectile[proj].netImportant = true;
+                            Main.projectile[proj].netUpdate = true;
+                        }
+
+                        if (Main.netMode != NetmodeID.Server)
+                        {
+                            for (int d = 0; d < 10; d++)
+                                Dust.NewDust(NPC.Center, 20, 20, DustID.GoldFlame, Main.rand.NextFloat(-3f, 3f), Main.rand.NextFloat(-3f, 3f));
+                            SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
+                            PunchCameraModifier shake = new PunchCameraModifier(NPC.Center, Main.rand.NextVector2Circular(1f, 1f), 5f, 1f, 10, 200f, FullName);
+                            Main.instance.CameraModifiers.Add(shake);
+                        }
+
+                        circleStarsShotCount++;
+                        if (Main.netMode != NetmodeID.MultiplayerClient) NPC.netUpdate = true;
+                        break;
+                    }
+                }
+
+                if (circleStarsShotCount >= CircleStarsTotal)
+                {
+                    NPC.frameCounter = 0;
+                    circleStarsHasTeleported = false;
+                    if (Main.netMode != NetmodeID.MultiplayerClient)
+                    {
+                        currentAttackState = ChooseRandomAttack();
+                        NPC.netUpdate = true;
+                    }
+                }
             }
             else if (currentAttackState == AttackState.PlayersDead)
             {
