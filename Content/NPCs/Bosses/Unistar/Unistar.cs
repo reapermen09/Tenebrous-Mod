@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Terraria;
 using Terraria.Audio;
 using Terraria.DataStructures;
@@ -124,31 +125,42 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             completedStartSequence = reader.ReadBoolean();
             circleStarsFlew = reader.ReadBoolean();
         }
+        List<AttackState> statesBase = new List<AttackState>()
+        {
+            AttackState.Blast,
+            AttackState.Chasing,
+            AttackState.PrepareDash,
+            AttackState.Spin,
+            AttackState.Spread,
+            AttackState.CircleStars
+        };
+        List<AttackState> states = new List<AttackState>();
         AttackState ChooseRandomAttack(AttackState current = default)
         {
             if(current == default) current = currentAttackState;
             if(current == AttackState.PrepareDash) return AttackState.Dashing;
             NPC.TargetClosest();
+            if(states.Count == 0) states = new(statesBase);
             if (!completedStartSequence)
             {
                 if(current == AttackState.Intro) return AttackState.Spread;
                 else if(current == AttackState.Spread) return AttackState.PrepareDash;
-                else if(current == AttackState.Dashing) completedStartSequence = true;
+                else if(current == AttackState.Dashing)
+                {
+                    states.Remove(AttackState.Spread);
+                    states.Remove(AttackState.PrepareDash);
+                    completedStartSequence = true;
+                }
             }
-            List<AttackState> states = new List<AttackState>()
-            {
-                AttackState.Blast,
-                AttackState.Chasing,
-                AttackState.PrepareDash,
-                AttackState.Spin,
-                AttackState.Spread,
-                AttackState.CircleStars
-            };
             AttackState rand = states[Main.rand.Next(states.Count)];
             if(rand == current ||
                 rand == AttackState.PrepareDash && current == AttackState.Dashing)
                     return ChooseRandomAttack(current);
-            if(current == AttackState.FlyToPlayer || Vector2.Distance(NPC.Center, Main.player[NPC.target].Center) < 800) return rand;
+            if(current == AttackState.FlyToPlayer || Vector2.Distance(NPC.Center, Main.player[NPC.target].Center) < 800)
+            {
+                states.Remove(rand);
+                return rand;
+            }
             return AttackState.FlyToPlayer;
         }
         public override void AI()
