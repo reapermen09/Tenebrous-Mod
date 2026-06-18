@@ -97,8 +97,10 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
         public float circleStarsAngle = 0f;
         public int circleStarsShotCount = 0;
         public bool circleStarsHasTeleported = false;
+        public bool circleStarsFlew = false;
         private const int CircleStarsTotal = 16;
         private const float CircleStarsRadius = 550f;
+        bool completedStartSequence = false;
         public override void SendExtraAI(BinaryWriter writer)
         {
             writer.Write((int)currentAttackState);
@@ -107,6 +109,8 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             writer.Write(circleStarsShotCount);
             writer.WriteVector2(circleStarsCenter);
             writer.Write(circleStarsHasTeleported);
+            writer.Write(completedStartSequence);
+            writer.Write(circleStarsFlew);
         }
 
         public override void ReceiveExtraAI(BinaryReader reader)
@@ -117,16 +121,19 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             circleStarsShotCount = reader.ReadInt32();
             circleStarsCenter = reader.ReadVector2();
             circleStarsHasTeleported = reader.ReadBoolean();
+            completedStartSequence = reader.ReadBoolean();
+            circleStarsFlew = reader.ReadBoolean();
         }
         AttackState ChooseRandomAttack(AttackState current = default)
         {
             if(current == default) current = currentAttackState;
             if(current == AttackState.PrepareDash) return AttackState.Dashing;
             NPC.TargetClosest();
-            if(current != AttackState.Chasing && NPC.HasValidTarget)
+            if (!completedStartSequence)
             {
-                if(Vector2.Distance(NPC.Center, Main.player[NPC.target].Center) > 1400)
-                    return AttackState.Chasing;
+                if(current == AttackState.Intro) return AttackState.Spread;
+                else if(current == AttackState.Spread) return AttackState.PrepareDash;
+                else if(current == AttackState.Dashing) completedStartSequence = true;
             }
             List<AttackState> states = new List<AttackState>()
             {
@@ -357,82 +364,98 @@ namespace TerrariaTenebrous.Content.NPCs.Bosses.Unistar
             }
             else if (currentAttackState == AttackState.CircleStars)
             {
-                if (Main.netMode != NetmodeID.MultiplayerClient && NPC.frameCounter <= 1)
+                if (Main.netMode != NetmodeID.MultiplayerClient && circleStarsShotCount == 0 && !circleStarsHasTeleported && !circleStarsFlew)
                 {
                     if (!NPC.HasValidTarget) NPC.TargetClosest();
                     circleStarsCenter = Main.player[NPC.target].Center + new Vector2(0, -200);
                     circleStarsAngle = 0f;
                     circleStarsShotCount = 0;
                     circleStarsHasTeleported = false;
+                    circleStarsFlew = false;
                     NPC.netUpdate = true;
                 }
 
-                if (!circleStarsHasTeleported)
+                if (!circleStarsFlew)
                 {
-                    PunchCameraModifier modifier = new PunchCameraModifier(NPC.Center, Vector2.One, 20f, 8f, 20, 600f, FullName);
-                    Main.instance.CameraModifiers.Add(modifier);
-                    SoundEngine.PlaySound(SoundID.Item14, NPC.Center);
-                    for (int i = 0; i < 30; i++)
+                    Vector2 targetPos = circleStarsCenter + 0f.ToRotationVector2() * CircleStarsRadius;
+                    float speed = 14f;
+                    float distance = Vector2.Distance(NPC.Center, targetPos);
+                    if (distance > 30f)
                     {
-                        Dust.NewDust(NPC.Center, 50, 50, DustID.GoldFlame, Main.rand.NextFloat(-8f, 8f), Main.rand.NextFloat(-8f, 8f));
+                        NPC.velocity = Vector2.Lerp(NPC.velocity, Vector2.Normalize(targetPos - NPC.Center) * speed, 0.08f);
+                        NPC.rotation = NPC.rotation.AngleLerp(NPC.velocity.ToRotation(), 0.1f);
                     }
-                    circleStarsHasTeleported = true;
-                    if (Main.netMode != NetmodeID.MultiplayerClient) NPC.netUpdate = true;
-                }
-
-                float angularSpeed = 0.025f;
-                circleStarsAngle += angularSpeed;
-                NPC.Center = circleStarsCenter + circleStarsAngle.ToRotationVector2() * CircleStarsRadius;
-                NPC.velocity = Vector2.Zero;
-
-                Vector2 tangent = (-circleStarsAngle.ToRotationVector2()).RotatedBy(-MathHelper.PiOver2);
-                NPC.rotation = NPC.rotation.AngleLerp(tangent.ToRotation(), 0.15f);
-
-                float threshold = 0.08f;
-
-                for (int i = circleStarsShotCount; i < CircleStarsTotal; i++)
-                {
-                    float targetAngle = MathHelper.TwoPi * i / CircleStarsTotal;
-                    float diff = circleStarsAngle - targetAngle;
-
-                    diff = (diff + MathHelper.Pi) % MathHelper.TwoPi - MathHelper.Pi;
-
-                    if (diff > 0 && diff < threshold)
+                    else
                     {
-                        Vector2 direction = Vector2.Normalize(circleStarsCenter - NPC.Center);
-                        direction = direction.RotatedBy(Main.rand.NextFloat(-0.1f, 0.1f));
-
-                        if (Main.netMode != NetmodeID.MultiplayerClient)
-                        {
-                            int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, direction * 12f,
-                                ModContent.ProjectileType<UnistarProjectile>(), projectileDmg, 1f);
-                            Main.projectile[proj].netImportant = true;
-                            Main.projectile[proj].netUpdate = true;
-                        }
-
+                        NPC.Center = targetPos;
+                        NPC.velocity = Vector2.Zero;
+                        circleStarsFlew = true;
                         if (Main.netMode != NetmodeID.Server)
                         {
-                            for (int d = 0; d < 10; d++)
-                                Dust.NewDust(NPC.Center, 20, 20, DustID.GoldFlame, Main.rand.NextFloat(-3f, 3f), Main.rand.NextFloat(-3f, 3f));
+                            for (int i = 0; i < 20; i++)
+                                Dust.NewDust(NPC.Center, 30, 30, DustID.GoldFlame, Main.rand.NextFloat(-4f, 4f), Main.rand.NextFloat(-4f, 4f));
                             SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
-                            PunchCameraModifier shake = new PunchCameraModifier(NPC.Center, Main.rand.NextVector2Circular(1f, 1f), 5f, 1f, 10, 200f, FullName);
-                            Main.instance.CameraModifiers.Add(shake);
                         }
-
-                        circleStarsShotCount++;
                         if (Main.netMode != NetmodeID.MultiplayerClient) NPC.netUpdate = true;
-                        break;
                     }
                 }
-
-                if (circleStarsShotCount >= CircleStarsTotal)
+                else
                 {
-                    NPC.frameCounter = 0;
-                    circleStarsHasTeleported = false;
-                    if (Main.netMode != NetmodeID.MultiplayerClient)
+                    float angularSpeed = 0.025f;
+                    circleStarsAngle += angularSpeed;
+                    NPC.Center = circleStarsCenter + circleStarsAngle.ToRotationVector2() * CircleStarsRadius;
+                    NPC.velocity = Vector2.Zero;
+
+                    Vector2 tangent = (-circleStarsAngle.ToRotationVector2()).RotatedBy(-MathHelper.PiOver2);
+                    NPC.rotation = NPC.rotation.AngleLerp(tangent.ToRotation(), 0.15f);
+
+                    float threshold = 0.08f;
+                    for (int i = circleStarsShotCount; i < CircleStarsTotal; i++)
                     {
-                        currentAttackState = ChooseRandomAttack();
-                        NPC.netUpdate = true;
+                        float targetAngle = MathHelper.TwoPi * i / CircleStarsTotal;
+                        float diff = circleStarsAngle - targetAngle;
+                        diff = (diff + MathHelper.Pi) % MathHelper.TwoPi - MathHelper.Pi;
+
+                        if (diff > 0 && diff < threshold)
+                        {
+                            Vector2 direction = Vector2.Normalize(circleStarsCenter - NPC.Center);
+                            direction = direction.RotatedBy(Main.rand.NextFloat(-0.1f, 0.1f));
+
+                            if (Main.netMode != NetmodeID.MultiplayerClient)
+                            {
+                                int proj = Projectile.NewProjectile(NPC.GetSource_FromAI(), NPC.Center, direction * 12f,
+                                    ModContent.ProjectileType<UnistarProjectile>(), projectileDmg, 1f);
+                                Main.projectile[proj].netImportant = true;
+                                Main.projectile[proj].netUpdate = true;
+                            }
+
+                            if (Main.netMode != NetmodeID.Server)
+                            {
+                                for (int d = 0; d < 10; d++)
+                                    Dust.NewDust(NPC.Center, 20, 20, DustID.GoldFlame, Main.rand.NextFloat(-3f, 3f), Main.rand.NextFloat(-3f, 3f));
+                                SoundEngine.PlaySound(SoundID.NPCHit5, NPC.Center);
+                                PunchCameraModifier shake = new PunchCameraModifier(NPC.Center, Main.rand.NextVector2Circular(1f, 1f), 5f, 1f, 10, 200f, FullName);
+                                Main.instance.CameraModifiers.Add(shake);
+                            }
+
+                            circleStarsShotCount++;
+                            if (Main.netMode != NetmodeID.MultiplayerClient) NPC.netUpdate = true;
+                            break;
+                        }
+                    }
+
+                    if (circleStarsShotCount >= CircleStarsTotal)
+                    {
+                        NPC.frameCounter = 0;
+                        circleStarsHasTeleported = false;
+                        circleStarsFlew = false;
+                        circleStarsAngle = 0f;
+                        circleStarsShotCount = 0;
+                        if (Main.netMode != NetmodeID.MultiplayerClient)
+                        {
+                            currentAttackState = ChooseRandomAttack();
+                            NPC.netUpdate = true;
+                        }
                     }
                 }
             }
