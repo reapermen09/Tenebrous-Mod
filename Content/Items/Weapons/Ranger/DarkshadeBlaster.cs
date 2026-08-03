@@ -12,8 +12,8 @@ namespace TerrariaTenebrous.Content.Items.Weapons.Ranger
     {
         public override void SetDefaults()
         {
-            Item.width = 62;
-            Item.height = 26;
+            Item.width = 82;
+            Item.height = 40;
 
             Item.rare = ItemRarityID.Yellow;
             Item.value = Item.buyPrice(gold: 3, silver: 50);
