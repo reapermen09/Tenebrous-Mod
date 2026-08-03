@@ -10,8 +10,8 @@ namespace TerrariaTenebrous.Content.Projectiles
     {
         public override void SetDefaults()
         {
-            Projectile.width = 14;
-            Projectile.height = 10;
+            Projectile.width = 10;
+            Projectile.height = 18;
 
             Projectile.friendly = true;
             Projectile.hostile = false;
